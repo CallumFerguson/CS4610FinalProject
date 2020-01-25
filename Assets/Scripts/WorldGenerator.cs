@@ -9,23 +9,54 @@ public class WorldGenerator : MonoBehaviour
 
     public Material worldMaterial;
 
-    void Start()
+    Vector2Int dimensions;
+    Vector2 size;
+    Vector3 position;
+
+    int lastSegment;
+
+    Queue<GameObject> chunks;
+
+    int numChunks = 10;
+
+    void Awake()
     {
-        for(int i = 0; i < 10; i++)
-            createChunk(new Vector3(0, 0, i * 50));
+        dimensions = new Vector2Int(100, 100);
+        size = new Vector2(50, 50);
+        position = new Vector3(0, 0, 0);
+
+        lastSegment = 0;
+
+        chunks = new Queue<GameObject>();
+
+        for (int i = 0; i < numChunks; i++)
+            createNextChunk();
     }
 
     void Update()
     {
-
+        int currentSegment = Mathf.FloorToInt(player.position.z / size.y);
+        if(currentSegment != lastSegment)
+        {
+            if (chunks.Count > numChunks)
+            {
+                GameObject oldestChunk = chunks.Dequeue();
+                Destroy(oldestChunk);
+            }
+            createNextChunk();
+        }
+        lastSegment = currentSegment;
     }
 
-    void createChunk(Vector3 position)
+    void createNextChunk()
     {
         GameObject worldChunk = new GameObject();
+        chunks.Enqueue(worldChunk);
         worldChunk.transform.parent = world;
         worldChunk.name = "WorldChunk";
         worldChunk.transform.position = position;
+
+        MeshCollider collider = worldChunk.AddComponent<MeshCollider>();
 
         MeshRenderer renderer = worldChunk.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = worldMaterial;
@@ -34,8 +65,7 @@ public class WorldGenerator : MonoBehaviour
 
         Mesh mesh = new Mesh();
 
-        Vector2Int dimensions = new Vector2Int(100, 100);
-        Vector2 size = new Vector2(50, 50);
+        position += new Vector3(0, 0, size.y);
 
         Vector3[] verticies = new Vector3[(dimensions.x + 1) * (dimensions.y + 1)];
         int[] triangles = new int[dimensions.x * dimensions.y * 6];
@@ -46,11 +76,12 @@ public class WorldGenerator : MonoBehaviour
         {
             for(int z = 0; z < dimensions.y + 1; z++)
             {
-                float scale = 3.5f;
+                float perlinScale = 3.5f;
+                float heightScale = 15f;
                 float xpos = position.x + (float)x / dimensions.x * size.x;
                 float zpos = position.z + (float)z / dimensions.y * size.y;
-                float height = Mathf.PerlinNoise(xpos / dimensions.x * scale, zpos / dimensions.y * scale);
-                verticies[i] = new Vector3((float)x / dimensions.x * size.x, height * 5f + Mathf.Pow(x - dimensions.x / 2, 2) / 250f, (float)z / dimensions.y * size.y);
+                float height = Mathf.PerlinNoise(xpos / dimensions.x * perlinScale, zpos / dimensions.y * perlinScale);
+                verticies[i] = new Vector3((float)x / dimensions.x * size.x, height * heightScale + Mathf.Pow(x - dimensions.x / 2, 2) / 250f, (float)z / dimensions.y * size.y);
                 uv[i] = new Vector2((float)x / dimensions.x, (float)z / dimensions.y);
                 i++;
             }
@@ -88,5 +119,6 @@ public class WorldGenerator : MonoBehaviour
         mesh.RecalculateNormals();
 
         filter.sharedMesh = mesh;
+        collider.sharedMesh = mesh;
     }
 }
