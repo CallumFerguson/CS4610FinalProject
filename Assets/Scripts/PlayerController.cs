@@ -7,7 +7,7 @@ public class PlayerController : MonoBehaviour
     public Transform ship;
     Rigidbody rb;
 
-    float speed = 25f;
+    public float speed = 25f;
 
     public float rotation = 0;
     float modelHeight = 0.4f;

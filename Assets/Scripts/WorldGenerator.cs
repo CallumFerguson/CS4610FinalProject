@@ -7,51 +7,71 @@ public class WorldGenerator : MonoBehaviour
     public Transform world;
     public Transform player;
 
+    public GameObject obstaclePrefab;
+
     public Material worldMaterial;
 
     Vector2Int dimensions;
     Vector2 size;
-    Vector3 position;
 
-    int lastSegment;
-
-    Queue<GameObject> chunks;
-
-    int numChunks = 10;
+    Dictionary<Vector2Int, GameObject> chunks;
+    int chunkRadius = 5;
+    Vector2Int lastChunkPos;
 
     void Awake()
     {
-        dimensions = new Vector2Int(100, 100);
+        dimensions = new Vector2Int(25, 25);
         size = new Vector2(50, 50);
-        position = new Vector3(0, 0, 0);
+        lastChunkPos = getChunkPos();
 
-        lastSegment = 0;
+        chunks = new Dictionary<Vector2Int, GameObject>();
 
-        chunks = new Queue<GameObject>();
+        createChunks(getChunkPos());
 
-        for (int i = 0; i < numChunks; i++)
-            createNextChunk();
+        //createChunkObject(Vector3.zero);
     }
 
     void Update()
     {
-        int currentSegment = Mathf.FloorToInt(player.position.z / size.y);
-        if(currentSegment != lastSegment)
+        Vector2Int currentChunkPos = getChunkPos();
+
+        if(currentChunkPos != lastChunkPos)
         {
-            if (chunks.Count > numChunks)
-            {
-                GameObject oldestChunk = chunks.Dequeue();
-                Destroy(oldestChunk);
-            }
-            createNextChunk();
+            createChunks(currentChunkPos);
         }
-        lastSegment = currentSegment;
+
+        lastChunkPos = currentChunkPos;
     }
 
-    void createNextChunk()
+    Vector2Int getChunkPos()
+    {
+        return new Vector2Int(Mathf.FloorToInt(player.transform.position.x / size.x), Mathf.FloorToInt(player.transform.position.z / size.y));
+    }
+
+    void createChunks(Vector2Int currentChunkPos)
+    {
+        HashSet<Vector2Int> chunksToRemove = new HashSet<Vector2Int>(chunks.Keys);
+        for (int x = currentChunkPos.x - chunkRadius; x < currentChunkPos.x + chunkRadius; x++)
+        {
+            for (int z = currentChunkPos.y - chunkRadius; z < currentChunkPos.y + chunkRadius; z++)
+            {
+                Vector2Int chunkPos = new Vector2Int(x, z);
+                chunksToRemove.Remove(chunkPos);
+                if (!chunks.ContainsKey(chunkPos))
+                    chunks.Add(chunkPos, createChunkObject(new Vector3(x * size.x, 0, z * size.y)));
+            }
+        }
+
+        foreach(var chunkPos in chunksToRemove)
+        {
+            Destroy(chunks[chunkPos]);
+            chunks.Remove(chunkPos);
+        }
+    }
+
+    GameObject createChunkObject(Vector3 position)
     {
         GameObject worldChunk = new GameObject();
-        chunks.Enqueue(worldChunk);
         worldChunk.transform.parent = world;
         worldChunk.name = "WorldChunk";
         worldChunk.transform.position = position;
@@ -63,9 +83,46 @@ public class WorldGenerator : MonoBehaviour
 
         MeshFilter filter = worldChunk.AddComponent<MeshFilter>();
 
-        Mesh mesh = new Mesh();
+        Mesh mesh = createChunkMesh(position);
 
-        position += new Vector3(0, 0, size.y);
+        filter.sharedMesh = mesh;
+        collider.sharedMesh = mesh;
+
+        //place obstacles
+        for(int i = 0; i < 20; i++)
+        {
+            Vector2 perlinPos = new Vector2(position.x + Random.value * size.x, position.z + Random.value * size.y);
+            Vector3 obPos = new Vector3(perlinPos.x, getPerlinHeight(perlinPos), perlinPos.y);
+            GameObject obstacle = Instantiate(obstaclePrefab, obPos, Quaternion.identity, worldChunk.transform);
+            obstacle.name = "obstacle";
+        }
+
+        return worldChunk;
+    }
+
+    float getPerlinHeight(Vector2 position)
+    {
+        float x = position.x;
+        float z = position.y;
+
+        Vector2 perlinOffset = new Vector2(10000, 10000);
+        float perlinScale = 0.035f;
+        float heightScale = 5f;
+
+        x += perlinOffset.x;
+        z += perlinOffset.y;
+
+        x *= perlinScale;
+        z *= perlinScale;
+
+        float height = Mathf.PerlinNoise(x, z);
+        height *= heightScale;
+        return height;
+    }
+
+    Mesh createChunkMesh(Vector3 position)
+    {
+        Mesh mesh = new Mesh();
 
         Vector3[] verticies = new Vector3[(dimensions.x + 1) * (dimensions.y + 1)];
         int[] triangles = new int[dimensions.x * dimensions.y * 6];
@@ -76,12 +133,10 @@ public class WorldGenerator : MonoBehaviour
         {
             for(int z = 0; z < dimensions.y + 1; z++)
             {
-                float perlinScale = 3.5f;
-                float heightScale = 15f;
                 float xpos = position.x + (float)x / dimensions.x * size.x;
                 float zpos = position.z + (float)z / dimensions.y * size.y;
-                float height = Mathf.PerlinNoise(xpos / dimensions.x * perlinScale, zpos / dimensions.y * perlinScale);
-                verticies[i] = new Vector3((float)x / dimensions.x * size.x, height * heightScale + Mathf.Pow(x - dimensions.x / 2, 2) / 250f, (float)z / dimensions.y * size.y);
+                float height = getPerlinHeight(new Vector2(xpos, zpos));
+                verticies[i] = new Vector3((float)x / dimensions.x * size.x, height, (float)z / dimensions.y * size.y);
                 uv[i] = new Vector2((float)x / dimensions.x, (float)z / dimensions.y);
                 i++;
             }
@@ -118,7 +173,6 @@ public class WorldGenerator : MonoBehaviour
         mesh.uv = uv;
         mesh.RecalculateNormals();
 
-        filter.sharedMesh = mesh;
-        collider.sharedMesh = mesh;
+        return mesh;
     }
 }
