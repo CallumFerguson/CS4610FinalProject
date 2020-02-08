@@ -27,8 +27,6 @@ public class WorldGenerator : MonoBehaviour
         chunks = new Dictionary<Vector2Int, GameObject>();
 
         createChunks(getChunkPos());
-
-        //createChunkObject(Vector3.zero);
     }
 
     void Update()
@@ -72,42 +70,67 @@ public class WorldGenerator : MonoBehaviour
     GameObject createChunkObject(Vector3 position)
     {
         GameObject worldChunk = new GameObject();
-        worldChunk.transform.parent = world;
         worldChunk.name = "WorldChunk";
         worldChunk.transform.position = position;
+        worldChunk.transform.parent = world;
 
-        MeshCollider collider = worldChunk.AddComponent<MeshCollider>();
-
-        MeshRenderer renderer = worldChunk.AddComponent<MeshRenderer>();
-        renderer.sharedMaterial = worldMaterial;
-
-        MeshFilter filter = worldChunk.AddComponent<MeshFilter>();
-
-        Mesh mesh = createChunkMesh(position);
-
-        filter.sharedMesh = mesh;
-        collider.sharedMesh = mesh;
+        GameObject bottom = createChunkMeshObject(position, false);
+        bottom.transform.parent = worldChunk.transform;
+        GameObject top = createChunkMeshObject(position + new Vector3(0, 10f, 0), true);
+        top.transform.parent = worldChunk.transform;
 
         //place obstacles
-        for(int i = 0; i < 20; i++)
+        for (int i = 0; i < 20; i++)
         {
             Vector2 perlinPos = new Vector2(position.x + Random.value * size.x, position.z + Random.value * size.y);
             Vector3 obPos = new Vector3(perlinPos.x, getPerlinHeight(perlinPos), perlinPos.y);
             GameObject obstacle = Instantiate(obstaclePrefab, obPos, Quaternion.identity, worldChunk.transform);
+            //obstacle.transform.eulerAngles = new Vector3(Random.value * 90f - 45f, Random.value * 360f, Random.value * 90f - 45f);
             obstacle.name = "obstacle";
+
+            RaycastHit hit;
+            if (Physics.Raycast(obstacle.transform.position + new Vector3(0, 5, 0), Vector3.down, out hit, Mathf.Infinity))
+            {
+                obstacle.transform.rotation = Quaternion.FromToRotation(Vector3.up, hit.normal);
+                obstacle.transform.eulerAngles += new Vector3(Random.value * 60 - 30f, 0, Random.value * 60f - 30f);
+            }
         }
 
         return worldChunk;
     }
 
+    GameObject createChunkMeshObject(Vector3 position, bool flip)
+    {
+        GameObject chunkMeshObject = new GameObject();
+        chunkMeshObject.name = "WorldChunk";
+        chunkMeshObject.transform.position = position;
+
+        MeshCollider collider = chunkMeshObject.AddComponent<MeshCollider>();
+
+        MeshRenderer renderer = chunkMeshObject.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = worldMaterial;
+
+        MeshFilter filter = chunkMeshObject.AddComponent<MeshFilter>();
+
+        Mesh mesh = createChunkMesh(position, flip);
+
+        filter.sharedMesh = mesh;
+        collider.sharedMesh = mesh;
+
+        return chunkMeshObject;
+    }
+
     float getPerlinHeight(Vector2 position)
+    {
+        return getPerlinHeight(position, 0.035f, 5f) + getPerlinHeight(position, 0.005f, 75f);
+    }
+
+    float getPerlinHeight(Vector2 position, float perlinScale, float heightScale)
     {
         float x = position.x;
         float z = position.y;
 
         Vector2 perlinOffset = new Vector2(10000, 10000);
-        float perlinScale = 0.035f;
-        float heightScale = 5f;
 
         x += perlinOffset.x;
         z += perlinOffset.y;
@@ -120,7 +143,7 @@ public class WorldGenerator : MonoBehaviour
         return height;
     }
 
-    Mesh createChunkMesh(Vector3 position)
+    Mesh createChunkMesh(Vector3 position, bool flip)
     {
         Mesh mesh = new Mesh();
 
@@ -129,9 +152,9 @@ public class WorldGenerator : MonoBehaviour
         Vector2[] uv = new Vector2[verticies.Length];
 
         //verticies
-        for(int i = 0, x = 0; x < dimensions.x + 1; x++)
+        for (int i = 0, x = 0; x < dimensions.x + 1; x++)
         {
-            for(int z = 0; z < dimensions.y + 1; z++)
+            for (int z = 0; z < dimensions.y + 1; z++)
             {
                 float xpos = position.x + (float)x / dimensions.x * size.x;
                 float zpos = position.z + (float)z / dimensions.y * size.y;
@@ -156,13 +179,13 @@ public class WorldGenerator : MonoBehaviour
                 //create triangle 1 of square
                 int squareIndex = i * 6;
                 triangles[squareIndex] = selectPositionInZRow;
-                triangles[squareIndex + 1] = selectPositionInZRow + 1;
-                triangles[squareIndex + 2] = selectPositionInZRow + zRowLength + 1;
-                
+                triangles[squareIndex + 1 + (!flip ? 0 : 1)] = selectPositionInZRow + 1;
+                triangles[squareIndex + 2 - (!flip ? 0 : 1)] = selectPositionInZRow + zRowLength + 1;
+
                 //create triangle 2 of square
                 triangles[squareIndex + 3] = selectPositionInZRow;
-                triangles[squareIndex + 4] = selectPositionInZRow + zRowLength + 1;
-                triangles[squareIndex + 5] = selectPositionInZRow + zRowLength;
+                triangles[squareIndex + 4 + (!flip ? 0 : 1)] = selectPositionInZRow + zRowLength + 1;
+                triangles[squareIndex + 5 - (!flip ? 0 : 1)] = selectPositionInZRow + zRowLength;
 
                 i++;
             }
